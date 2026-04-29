@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snake - 4 Hráči</title>
+    <style>
+        body {
+            background-color: #2b2b2b;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            margin-top: 0;
+        }
+        #game-container {
+            display: inline-block;
+        }
+        canvas {
+            background-color: #111;
+            border: 4px solid #444;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            display: block;
+            margin: 0 auto;
+        }
+        #ui-panel {
+            margin-top: 20px;
+            height: 60px;
+        }
+        #status {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #f39c12;
+        }
+        button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #2ecc71;
+        }
+        #restartBtn {
+            display: none;
+            background-color: #3498db;
+        }
+        #restartBtn:hover {
+            background-color: #2980b9;
+        }
+        .controls-grid {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .control-card {
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 150px;
+            border-left: 5px solid;
+        }
+        .p1 { border-color: #e74c3c; }
+        .p2 { border-color: #3498db; }
+        .p3 { border-color: #2ecc71; }
+        .p4 { border-color: #f1c40f; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <h1>Multiplayer Snake</h1>
+        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        
+        <div id="ui-panel">
+            <div id="status">Čeká se na start...</div>
+            <button id="startBtn">Start</button>
+            <button id="restartBtn">Nová hra</button>
+        </div>
+
+        <div class="controls-grid">
+            <div class="control-card p1">
+                <h3 style="color: #e74c3c; margin: 0 0 10px 0;">Hráč 1</h3>
+                <p style="margin:0;">W A S D</p>
+            </div>
+            <div class="control-card p2">
+                <h3 style="color: #3498db; margin: 0 0 10px 0;">Hráč 2</h3>
+                <p style="margin:0;">Šipky</p>
+            </div>
+            <div class="control-card p3">
+                <h3 style="color: #2ecc71; margin: 0 0 10px 0;">Hráč 3</h3>
+                <p style="margin:0;">I J K L</p>
+            </div>
+            <div class="control-card p4">
+                <h3 style="color: #f1c40f; margin: 0 0 10px 0;">Hráč 4</h3>
+                <p style="margin:0;">T F G H</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const startBtn = document.getElementById("startBtn");
+        const restartBtn = document.getElementById("restartBtn");
+        const statusText = document.getElementById("status");
+
+        const gridSize = 15;
+        const tileCount = canvas.width / gridSize;
+        
+        let state = "WAITING"; // WAITING, PLAYING, GAMEOVER
+        let gameLoop;
+        let apple = { x: 10, y: 10 };
+        
+        // Inicializace hadů
+        let snakes = [];
+
+        function initGame() {
+            snakes = [
+                { id: 1, name: "Hráč 1 (Červená)", color: "#e74c3c", body: [{ x: 2, y: 2 }], dx: 1, dy: 0, nextDx: 1, nextDy: 0, alive: true, length: 4 },
+                { id: 2, name: "Hráč 2 (Modrá)", color: "#3498db", body: [{ x: tileCount - 3, y: tileCount - 3 }], dx: -1, dy: 0, nextDx: -1, nextDy: 0, alive: true, length: 4 },
+                { id: 3, name: "Hráč 3 (Zelená)", color: "#2ecc71", body: [{ x: tileCount - 3, y: 2 }], dx: 0, dy: 1, nextDx: 0, nextDy: 1, alive: true, length: 4 },
+                { id: 4, name: "Hráč 4 (Žlutá)", color: "#f1c40f", body: [{ x: 2, y: tileCount - 3 }], dx: 0, dy: -1, nextDx: 0, nextDy: -1, alive: true, length: 4 }
+            ];
+            spawnApple();
+            state = "WAITING";
+            statusText.innerText = "Čeká se na start...";
+            statusText.style.color = "#f39c12";
+            startBtn.style.display = "inline-block";
+            restartBtn.style.display = "none";
+            draw();
+        }
+
+        function spawnApple() {
+            let valid = false;
+            while (!valid) {
+                apple.x = Math.floor(Math.random() * tileCount);
+                apple.y = Math.floor(Math.random() * tileCount);
+                valid = true;
+                
+                // Zkontroluje, zda jablko nespadlo na nějakého hada
+                for (let snake of snakes) {
+                    if (!snake.alive) continue;
+                    for (let segment of snake.body) {
+                        if (segment.x === apple.x && segment.y === apple.y) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        function startGame() {
+            state = "PLAYING";
+            startBtn.style.display = "none";
+            statusText.innerText = "Hra probíhá!";
+            statusText.style.color = "#ffffff";
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(update, 120); // Rychlost hry (120ms na tick)
+        }
+
+        function gameOver(winnerText, color) {
+            state = "GAMEOVER";
+            clearInterval(gameLoop);
+            statusText.innerHTML = `Konec hry! <span style="color:${color}">${winnerText}</span>`;
+            restartBtn.style.display = "inline-block";
+        }
+
+        function update() {
+            if (state !== "PLAYING") return;
+
+            // Krok 1: Posun všech hadů
+            snakes.forEach(snake => {
+                if (!snake.alive) return;
+                
+                // Aplikace zatáčení
+                snake.dx = snake.nextDx;
+                snake.dy = snake.nextDy;
+
+                const head = { x: snake.body[0].x + snake.dx, y: snake.body[0].y + snake.dy };
+                snake.body.unshift(head); // Přidá novou hlavu dopředu
+                
+                // Kontrola snědení jablka
+                if (head.x === apple.x && head.y === apple.y) {
+                    snake.length += 2; // Růst po snědení
+                    spawnApple();
+                }
+
+                // Odstranění konce ocasu, pokud had neroste
+                while (snake.body.length > snake.length) {
+                    snake.body.pop();
+                }
+            });
+
+            // Krok 2: Detekce kolizí
+            snakes.forEach(snake => {
+                if (!snake.alive) return;
+                const head = snake.body[0];
+
+                // 1. Náraz do zdi
+                if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount) {
+                    snake.alive = false;
+                }
+
+                // 2. Náraz do jiných hadů nebo do sebe
+                snakes.forEach(otherSnake => {
+                    if (!otherSnake.alive) return;
+                    
+                    // Kontrola všech částí těla ostatních (i sebe, kromě vlastní hlavy)
+                    otherSnake.body.forEach((segment, index) => {
+                        if (snake === otherSnake && index === 0) return; // Vlastní hlava se nepočítá
+                        
+                        // Zvláštní případ: srážka hlavou (oba umřou)
+                        if (index === 0 && head.x === segment.x && head.y === segment.y) {
+                            snake.alive = false;
+                            otherSnake.alive = false;
+                        } 
+                        // Běžný náraz do těla
+                        else if (head.x === segment.x && head.y === segment.y) {
+                            snake.alive = false;
+                        }
+                    });
+                });
+            });
+
+            // Smazání těl mrtvých hadů z hrací plochy
+            snakes.forEach(snake => {
+                if (!snake.alive) snake.body = [];
+            });
+
+            // Krok 3: Kontrola vítěze
+            const aliveSnakes = snakes.filter(s => s.alive);
+            if (aliveSnakes.length === 1) {
+                gameOver(`Vyhrál ${aliveSnakes[0].name}!`, aliveSnakes[0].color);
+            } else if (aliveSnakes.length === 0) {
+                gameOver("Remíza! Všichni zemřeli.", "#ffffff");
+            }
+
+            draw();
+        }
+
+        function draw() {
+            // Vyčištění plátna
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Vykreslení jablka
+            if (state !== "WAITING") {
+                ctx.fillStyle = "#e74c3c"; // Červené jablko
+                ctx.beginPath();
+                ctx.arc(apple.x * gridSize + gridSize/2, apple.y * gridSize + gridSize/2, gridSize/2 - 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Vykreslení hadů
+            snakes.forEach(snake => {
+                if (!snake.alive || snake.body.length === 0) return;
+
+                snake.body.forEach((segment, index) => {
+                    ctx.fillStyle = index === 0 ? "#ffffff" : snake.color; // Hlava je bílá pro orientaci
+                    ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 1, gridSize - 1);
+                });
+            });
+        }
+
+        // Zpracování ovládání klávesnicí
+        document.addEventListener("keydown", event => {
+            const code = event.code;
+            
+           // Funkce pro zamezení pohybu vzad a správné zatáčení
+const changeDirection = (snakeId, dx, dy) => {
+    const snake = snakes.find(s => s.id === snakeId);
+    if (snake && snake.alive) {
+        // Změníme horizontální směr (dx) jen tehdy, pokud se had zrovna nehýbe po x ose
+        if (dx !== 0 && snake.dx === 0) { 
+            snake.nextDx = dx; 
+            snake.nextDy = dy; 
+        }
+        // Změníme vertikální směr (dy) jen tehdy, pokud se had zrovna nehýbe po y ose
+        if (dy !== 0 && snake.dy === 0) { 
+            snake.nextDx = dx; 
+            snake.nextDy = dy; 
+        }
+    }
+};
+
+            // P1 (W A S D)
+            if (code === "KeyW") changeDirection(1, 0, -1);
+            if (code === "KeyS") changeDirection(1, 0, 1);
+            if (code === "KeyA") changeDirection(1, -1, 0);
+            if (code === "KeyD") changeDirection(1, 1, 0);
+
+            // P2 (Šipky)
+            if (code === "ArrowUp") changeDirection(2, 0, -1);
+            if (code === "ArrowDown") changeDirection(2, 0, 1);
+            if (code === "ArrowLeft") changeDirection(2, -1, 0);
+            if (code === "ArrowRight") changeDirection(2, 1, 0);
+
+            // P3 (I J K L)
+            if (code === "KeyI") changeDirection(3, 0, -1);
+            if (code === "KeyK") changeDirection(3, 0, 1);
+            if (code === "KeyJ") changeDirection(3, -1, 0);
+            if (code === "KeyL") changeDirection(3, 1, 0);
+
+            // P4 (T F G H)
+            if (code === "KeyT") changeDirection(4, 0, -1);
+            if (code === "KeyG") changeDirection(4, 0, 1);
+            if (code === "KeyF") changeDirection(4, -1, 0);
+            if (code === "KeyH") changeDirection(4, 1, 0);
+        });
+
+        startBtn.addEventListener("click", startGame);
+        restartBtn.addEventListener("click", initGame);
+
+        // První spuštění (vykreslení počátečního stavu)
+        initGame();
+    </script>
+</body>
+</html>
